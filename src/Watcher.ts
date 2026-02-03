@@ -19,19 +19,12 @@ export class Watcher {
   private runningCount: number = 0;
   private readonly maxConcurrent: number = 5;
 
-  constructor(watchDir?: string, outputDir?: string) {
-    if (!watchDir || !outputDir) {
-      console.error('Missing required parameters');
-      process.exit(1);
-    }
-    this.watchDir = watchDir;
-    this.outputDir = outputDir;
+  constructor() {
+    this.watchDir = path.join(__dirname, 'input');
+    this.outputDir = path.join(__dirname, 'output');
 
     if (!fs.existsSync(this.watchDir)) {
-      console.error(
-        `Watch directory does not exist: ${this.watchDir} - Please check your .env file to make sure that the WATCH_DIR path is absolute and exists.`
-      );
-      process.exit(1);
+      fs.mkdirSync(this.watchDir, { recursive: true });
     }
 
     if (!fs.existsSync(this.outputDir)) {
@@ -48,6 +41,8 @@ export class Watcher {
         pollInterval: 100, // Check for file changes every 100ms
       },
     });
+
+    console.log(`Watching for files in ${this.watchDir}`);
 
     watcher.on('add', (filePath) => {
       const fileName = path.basename(filePath);

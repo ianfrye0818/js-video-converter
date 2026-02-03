@@ -1,0 +1,8 @@
+services:
+  movie-convert:
+    image: ianfrye/movie-convert:prod
+    container_name: movie-convert
+    volumes:
+      - /path/to/your/input:/app/input
+      - /path/to/your/output:/app/output
+    restart: unless-stopped

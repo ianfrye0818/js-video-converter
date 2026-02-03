@@ -47,6 +47,8 @@ choco install ffmpeg
 
 ## Installation
 
+### Local Development
+
 1. Clone the repository:
 
 ```bash
@@ -60,33 +62,25 @@ cd movie-convert
 pnpm install
 ```
 
-3. Create a `.env` file in the root directory:
+3. The application uses `input` and `output` directories relative to the application root. These
+   will be created automatically if they don't exist.
 
-```bash
-cp .env.example .env
-```
+### Docker Deployment
 
-4. Configure your directories in `.env`:
-
-```env
-WATCH_DIR=/path/to/watch/directory
-OUTPUT_DIR=/path/to/output/directory
-```
-
-**Important**: Use absolute paths for both `WATCH_DIR` and `OUTPUT_DIR`. The watch directory must
-exist, while the output directory will be created automatically if it doesn't exist.
+The application is containerized and ready for Docker deployment. FFmpeg is included in the Docker
+image, so no additional installation is required.
 
 ## Usage
 
-### Development Mode
+### Local Development
 
 Start the watcher in development mode with hot-reload:
 
 ```bash
-pnpm start
+pnpm dev
 ```
 
-### Production Mode
+### Production Mode (Local)
 
 1. Build the project:
 
@@ -97,19 +91,73 @@ pnpm build
 2. Start the watcher:
 
 ```bash
-pnpm start:prod
+pnpm start
 ```
+
+### Docker Deployment
+
+#### Using Docker Compose
+
+1. Edit `docker-compose.yaml` and update the volume paths:
+
+```yaml
+volumes:
+  - /path/to/your/input:/app/input
+  - /path/to/your/output:/app/output
+```
+
+2. Start the container:
+
+```bash
+docker-compose up -d
+```
+
+#### Using Docker Directly
+
+1. Build the image:
+
+```bash
+docker build -t movie-convert .
+```
+
+2. Run the container:
+
+```bash
+docker run -d \
+  --name movie-convert \
+  -v /path/to/your/input:/app/input \
+  -v /path/to/your/output:/app/output \
+  movie-convert
+```
+
+#### Building and Pushing Docker Image
+
+Use the provided script to build and push multi-architecture images:
+
+```bash
+./build-and-push.sh [VERSION]
+```
+
+Examples:
+
+- `./build-and-push.sh v1.0.0` - Build and push with version tag
+- `./build-and-push.sh latest` - Build and push with latest tag
+- `./build-and-push.sh` - Build and push with default 'prod' tag
+
+The script builds for both `linux/amd64` and `linux/arm64` architectures.
 
 ## How It Works
 
-1. The watcher monitors the `WATCH_DIR` for new video files
-2. When a new file is detected, it waits 2 seconds to ensure the file has finished copying
-3. The file is validated (extension check) and checked if it already exists in the output directory
-4. If valid and not already converted, it's added to the conversion queue
-5. Up to 5 conversions run concurrently
-6. Each conversion outputs an MP4 file with the naming pattern: `{original_filename}_converted.mp4`
-7. Progress bars show the status of each active conversion
-8. Upon completion, conversion details including file sizes are displayed
+1. On startup, the application checks if FFmpeg is installed and exits with an error if not found
+2. The watcher monitors the `input` directory (relative to the application root) for new video files
+3. When a new file is detected, it waits 2 seconds to ensure the file has finished copying
+4. The file is validated (extension check) and checked if it already exists in the output directory
+5. If valid and not already converted, it's added to the conversion queue
+6. Up to 5 conversions run concurrently
+7. Each conversion outputs an MP4 file to the `output` directory with the naming pattern:
+   `{original_filename}_converted.mp4`
+8. Progress bars show the status of each active conversion
+9. Upon completion, conversion details including file sizes are displayed
 
 ## Conversion Settings
 
@@ -125,15 +173,21 @@ The converter uses the following FFmpeg settings for optimal quality and compati
 ```
 movie-convert/
 ├── src/
-│   ├── index.ts           # Entry point
+│   ├── index.ts           # Entry point with FFmpeg check
 │   ├── Watcher.ts         # Main watcher class with conversion logic
 │   ├── ProgressBar.ts     # Progress indicator implementation
+│   ├── input/             # Input directory (watched for new files)
+│   ├── output/            # Output directory (converted files)
 │   └── utils/             # Utility functions for formatting
 │       ├── formatConversionStart.ts
 │       ├── formatConversionEnd.ts
 │       ├── formatFileSize.ts
 │       └── index.ts
-├── .env                   # Environment configuration (not in git)
+├── dockerfile             # Docker image definition
+├── docker-compose.yaml    # Docker Compose configuration
+├── build-and-push.sh     # Script for building and pushing Docker images
+├── .dockerignore         # Files excluded from Docker build
+├── .env.example          # Example environment file
 ├── package.json
 ├── tsconfig.json
 └── README.md
@@ -141,33 +195,42 @@ movie-convert/
 
 ## Scripts
 
-- `pnpm start` - Start the watcher in development mode with hot-reload
-- `pnpm start:prod` - Start the watcher in production mode (requires build)
+- `pnpm dev` - Start the watcher in development mode with hot-reload (uses `tsx watch`)
+- `pnpm start` - Start the watcher in production mode (requires build, runs compiled JavaScript)
+- `pnpm start:env` - Start the watcher with environment variables from `.env` file
 - `pnpm build` - Compile TypeScript to JavaScript
 - `pnpm typecheck` - Type check without emitting files
 
 ## Troubleshooting
 
-### "Watch directory does not exist" Error
-
-Make sure your `WATCH_DIR` path in `.env` is:
-
-- An absolute path (starts with `/` on macOS/Linux or `C:\` on Windows)
-- Points to an existing directory
-
 ### FFmpeg Not Found
 
-Ensure FFmpeg is installed and available in your system PATH. Test with:
+The application checks for FFmpeg on startup and will exit with an error if not found.
+
+**Local Development:** Ensure FFmpeg is installed and available in your system PATH. Test with:
 
 ```bash
 ffmpeg -version
 ```
 
+**Docker:** FFmpeg is included in the Docker image, so this shouldn't be an issue. If you encounter
+FFmpeg errors in Docker, ensure you're using the official image.
+
 ### Files Not Being Detected
 
-- Ensure files are being copied to the watch directory (not moved from the same filesystem)
-- Check that file extensions match supported formats
+- Ensure files are being copied to the `input` directory (or mounted volume in Docker)
+- Check that file extensions match supported formats (`.mov`, `.avi`, `.mkv`, `.wmv`, `.flv`,
+  `.webm`, `.mp4`)
 - Verify the watcher is running and monitoring the correct directory
+- In Docker, ensure volume mounts are correctly configured
+
+### Docker Volume Permissions
+
+If you encounter permission issues with Docker volumes:
+
+- Ensure the container has read access to the input directory
+- Ensure the container has write access to the output directory
+- You may need to adjust file permissions or use a user mapping in Docker
 
 ## License
 
