@@ -3,8 +3,7 @@ import ffmpeg from 'fluent-ffmpeg';
 import * as fs from 'fs';
 import * as path from 'path';
 import { ProgressBar } from './ProgressBar';
-import { formatConversionComplete } from './utils';
-import { formatConversionStart } from './utils/formatConversionStart';
+import { formatConversionComplete, formatConversionStart } from './utils';
 
 interface ConversionTask {
   filePath: string;
@@ -16,18 +15,28 @@ interface ConversionTask {
 export class Watcher {
   private watchDir: string;
   private outputDir: string;
-  private ffmpegPath: string;
   private queue: ConversionTask[] = [];
   private runningCount: number = 0;
   private readonly maxConcurrent: number = 5;
 
-  constructor(watchDir?: string, outputDir?: string, ffmpegPath?: string) {
-    if (!watchDir || !outputDir || !ffmpegPath) {
-      throw new Error('Missing required parameters');
+  constructor(watchDir?: string, outputDir?: string) {
+    if (!watchDir || !outputDir) {
+      console.error('Missing required parameters');
+      process.exit(1);
     }
     this.watchDir = watchDir;
     this.outputDir = outputDir;
-    this.ffmpegPath = ffmpegPath;
+
+    if (!fs.existsSync(this.watchDir)) {
+      console.error(
+        `Watch directory does not exist: ${this.watchDir} - Please check your .env file to make sure that the WATCH_DIR path is absolute and exists.`
+      );
+      process.exit(1);
+    }
+
+    if (!fs.existsSync(this.outputDir)) {
+      fs.mkdirSync(this.outputDir, { recursive: true });
+    }
   }
 
   public start() {
@@ -89,30 +98,12 @@ export class Watcher {
     );
 
     const progressBar = new ProgressBar(task.fileName);
-    let lastOutputSize = 0;
-    const progressInterval = setInterval(() => {
-      // Fallback: estimate progress from output file size if percent not available
-      if (fs.existsSync(task.outputFilePath)) {
-        try {
-          const currentSize = fs.statSync(task.outputFilePath).size;
-          if (currentSize > lastOutputSize) {
-            // Rough estimate: assume output will be similar size to input (or smaller)
-            // This is just a visual indicator, not precise
-            const estimatedPercent = Math.min(95, (currentSize / task.inputFileSize) * 100);
-            if (estimatedPercent > progressBar.lastPercent) {
-              progressBar.update(estimatedPercent);
-            }
-            lastOutputSize = currentSize;
-          }
-        } catch {
-          // File might be locked, ignore
-        }
-      }
-    }, 500); // Check every 500ms
+
+    // Keep event loop active so ProgressBar animation timer fires reliably
+    const keepAlive = setInterval(() => {}, 500);
 
     const onComplete = () => {
-      clearInterval(progressInterval);
-      progressBar.update(100); // Ensure it shows 100%
+      clearInterval(keepAlive);
       progressBar.clear();
       const outputFileSize = fs.statSync(task.outputFilePath).size;
       formatConversionComplete(
@@ -141,22 +132,8 @@ export class Watcher {
         '-pix_fmt yuv420p', // Compatible with most devices
         '-crf 23', // Standard Quality / Size Balance
       ])
-      .on('start', () => {
-        console.log('  Converting...\n');
-      })
-      .on('progress', (progress) => {
-        const percent = progress.percent;
-        const timemark = progress.timemark || '00:00:00';
-        const currentKbps = progress.currentKbps || 0;
-        if (percent !== undefined) {
-          progressBar.update(percent, timemark, currentKbps);
-        } else {
-          // If no percent, at least show time and speed
-          progressBar.update(progressBar.lastPercent, timemark, currentKbps);
-        }
-      })
       .on('error', (err) => {
-        clearInterval(progressInterval);
+        clearInterval(keepAlive);
         progressBar.clear();
         console.error(`\n❌ Error converting ${task.fileName}: ${err.message}\n`);
 

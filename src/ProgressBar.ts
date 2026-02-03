@@ -1,6 +1,5 @@
 // Simple converting indicator with animated dots
 export class ProgressBar {
-  public lastPercent = 0;
   private id: number;
   private fileName: string;
   private dotCount: number = 0;
@@ -78,12 +77,6 @@ export class ProgressBar {
 
     // Restore cursor position
     process.stdout.write('\x1b[u');
-  }
-
-  update(percent: number, timemark?: string, currentKbps?: number): void {
-    // Just track the percent, but don't render based on it
-    // The animation timer handles rendering
-    this.lastPercent = percent;
   }
 
   clear(): void {
