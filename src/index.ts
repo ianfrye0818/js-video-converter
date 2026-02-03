@@ -1,11 +1,11 @@
-import { exec } from 'child_process';
+import { execSync } from 'child_process';
 import 'dotenv/config';
 import { Watcher } from './Watcher';
 
 // Check to see if ffmpeg is installed
-const ffmpegPath = exec('which ffmpeg');
-
-if (ffmpegPath.stderr?.toString().trim()) {
+try {
+  execSync('which ffmpeg', { stdio: 'ignore' });
+} catch (error) {
   console.error('\n❌ FFmpeg is required for this application and is not installed.\n');
   console.error('Please install FFmpeg using one of the following methods:\n');
   console.error('macOS:');

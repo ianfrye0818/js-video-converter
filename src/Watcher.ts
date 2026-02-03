@@ -20,8 +20,11 @@ export class Watcher {
   private readonly maxConcurrent: number = 5;
 
   constructor() {
-    this.watchDir = path.join(__dirname, 'input');
-    this.outputDir = path.join(__dirname, 'output');
+    // Use process.cwd() to get the app root directory (works in both dev and production)
+    // In Docker, this will be /app; in local dev, it will be the project root
+    const appRoot = process.cwd();
+    this.watchDir = path.join(appRoot, 'input');
+    this.outputDir = path.join(appRoot, 'output');
 
     if (!fs.existsSync(this.watchDir)) {
       fs.mkdirSync(this.watchDir, { recursive: true });
@@ -44,7 +47,7 @@ export class Watcher {
 
     console.log(`Watching for files in ${this.watchDir}`);
 
-    watcher.on('add', (filePath) => {
+    watcher.on('add', (filePath: string) => {
       const fileName = path.basename(filePath);
       const outputFileName = `${path.parse(fileName).name}_converted.mp4`;
       const outputFilePath = path.join(this.outputDir, outputFileName);
